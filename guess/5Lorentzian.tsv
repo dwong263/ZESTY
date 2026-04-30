@@ -1,0 +1,17 @@
+Parameter	Label	Guess
+offset	offset	0.8
+amp_1	water	-0.67
+width_1	water	1.8
+shift_1	water	0
+amp_2	MT	-0.15
+shift_2	MT	40
+width_2	MT	-2
+amp_3	NOE (-3.5 ppm)	-0.04
+width_3	NOE (-3.5 ppm)	1
+shift_3	NOE (-3.5 ppm)	-3.5
+amp_4	amide (3.5 ppm)	-0.05
+width_4	amide (3.5 ppm)	4.5
+shift_4	amide (3.5 ppm)	3.5
+amp_5	amine (2.75 ppm)	-0.05
+width_5	amine (2.75 ppm)	1
+shift_5	amine (2.75 ppm)	2.75

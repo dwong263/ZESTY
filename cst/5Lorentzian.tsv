@@ -1,0 +1,17 @@
+Parameter	Label	Minimnum	Maximum
+offset	offset	0.5	1
+amp_1	water	-1	-0.02
+width_1	water	0.3	10
+shift_1	water	-1	1
+amp_2	MT	-0.5	0
+shift_2	MT	30	60
+width_2	MT	-2.5	0
+amp_3	NOE (-3.5 ppm)	-0.2	0
+width_3	NOE (-3.5 ppm)	0.4	6
+shift_3	NOE (-3.5 ppm)	-4	-3
+amp_4	amide (3.5 ppm)	-0.2	0
+width_4	amide (3.5 ppm)	0.4	6
+shift_4	amide (3.5 ppm)	3.2	3.8
+amp_5	amine (2.75 ppm)	-0.1	0
+width_5	amine (2.75 ppm)	0.4	6
+shift_5	amine (2.75 ppm)	2.5	3

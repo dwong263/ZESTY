@@ -9,6 +9,9 @@ import os, sys
 import nibabel as nib
 import numpy as np
 
+from natsort import natsorted
+from util.croputils import crop_to_common_overlap
+
 class ConcatApp(QMainWindow):
     def __init__(self):
         # Initialize Window
@@ -42,7 +45,7 @@ class ConcatApp(QMainWindow):
         )
         if files:   # user didn't cancel
             self.selected_files = files
-            self.selected_files.sort()
+            self.selected_files = natsorted(self.selected_files)
             self.ui.ConsoleTextBrowser.append("The following CEST images were loaded.")
             self._display_file_tree(self.selected_files)
             self.ui.ConsoleTextBrowser.append("\n")
@@ -107,28 +110,56 @@ class ConcatApp(QMainWindow):
         self.ui.SaveFileButton.setEnabled(True)   
 
     def _save_file(self):
-        self.ui.ConsoleTextBrowser.append("Normalizing data ...")
+
+        filename = self.ui.FilenameLineEdit.text().strip().replace(".nii.gz", "").replace(".nii", "")
+
+        self.ui.ConsoleTextBrowser.append("Loading data ...")
         cest_imgs = [nib.load(file) for file in self.selected_files]
         cest_data = [img.get_fdata() for img in cest_imgs]
 
+
+        self.ui.ConsoleTextBrowser.append("Concatenating data ...")
+        stacked_cest_data = np.stack(cest_data, axis=3)
+        stacked_cest_img  = nib.Nifti1Image(stacked_cest_data, cest_imgs[0].affine, cest_imgs[0].header)
+        
+        nib.save(stacked_cest_img, f"{filename}.nii.gz")
+        self.ui.ConsoleTextBrowser.append(f" | File saved to: {filename}.nii.gz")
+        self.ui.ConsoleTextBrowser.append("\n")
+
+
+        self.ui.ConsoleTextBrowser.append("Masking data ...")
+        self.ui.ConsoleTextBrowser.append(f" | Mask loaded from: {self.mask_file}")
         mask_img  = nib.load(self.mask_file)
-        mask_data = mask_img.get_fdata()
 
+        cest_data_masked = []
+        cest_masks = []
+        for img in cest_imgs:
+            cest_img, cest_mask = crop_to_common_overlap(img, mask_img, resample=True)
+            cest_data_masked.append(cest_img.get_fdata() * cest_mask.get_fdata())
+            cest_masks.append(cest_mask.get_fdata())
+
+        stacked_cest_data_masked = np.stack(cest_data_masked, axis=3)
+        stacked_cest_img_masked  = nib.Nifti1Image(stacked_cest_data_masked, cest_imgs[0].affine, cest_imgs[0].header)
+
+        nib.save(stacked_cest_img_masked, f"{filename}_masked.nii.gz")
+        self.ui.ConsoleTextBrowser.append(f" | File saved to: {filename}_masked.nii.gz")
+        self.ui.ConsoleTextBrowser.append("\n")
+
+
+        self.ui.ConsoleTextBrowser.append("Normalizing masked data ...")
+        
         cest_data_normalized = []
-        for data in cest_data:
-            # Normalize by M0 image (first image)
-            data_normalized = (data * mask_data) / cest_data[0]
-            # Handle division by zero and NaN values
-            data_normalized = np.nan_to_num(data_normalized, nan=0.0, posinf=0.0, neginf=0.0)
+        for i, data in enumerate(cest_data_masked):
+            data_normalized = data / cest_data_masked[0]        # Normalize by M0 image
+            data_normalized = data_normalized * cest_masks[i]   # Reapply mask
+            data_normalized = np.nan_to_num(data_normalized, nan=0.0, posinf=0.0, neginf=0.0)   # Handle NaNs
             cest_data_normalized.append(data_normalized)
+        
+        stacked_cest_data_normalized = np.stack(cest_data_normalized, axis=3)[..., 1:]
+        stacked_cest_img_normalized  = nib.Nifti1Image(stacked_cest_data_normalized, cest_imgs[0].affine, cest_imgs[0].header)
 
-        self.ui.ConsoleTextBrowser.append("Stacking data ...")
-        # Stack data and discard -300 ppm M0 image
-        stacked_cest_data_normalied = np.stack(cest_data_normalized, axis=3)[..., 1:] 
-        stacked_cest_img_normalized = nib.Nifti1Image(stacked_cest_data_normalied, cest_imgs[0].affine, cest_imgs[0].header)
-
-        nib.save(stacked_cest_img_normalized, self.ui.FilenameLineEdit.text().strip())
-        self.ui.ConsoleTextBrowser.append(f"File saved to: {self.ui.FilenameLineEdit.text().strip()}")
+        nib.save(stacked_cest_img_normalized, f"{filename}_masked_normalized.nii.gz")
+        self.ui.ConsoleTextBrowser.append(f" | File saved to: {filename}_masked_normalized.nii.gz")
         self.ui.ConsoleTextBrowser.append("\n")
 
     # ---- Display Methods ---- #

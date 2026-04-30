@@ -138,50 +138,27 @@ def _multi_lorentzian(params, f):
 def _residual_lorentzian(params, f, z_spectrum):
     return _multi_lorentzian(params, f) - z_spectrum
 
-def create_params_lorentzian(n_peaks=7, p0=None):
+def create_params_lorentzian(p0, bounds):
     params = Parameters()
+
+    n_peaks = int((len(p0)-1)/3)
     params.add('n_peaks', value=n_peaks, vary=False)
-
-    BOUNDS_5L = [
-        [0.5, 1.0],                                 # vertical offset
-        [-1.0, -0.02], [0.3, 10.0],  [-1.0, 1.0],   # water
-        [-0.5, 0.0],   [30.0, 60.0], [-2.5, 0.0],   # MT
-        [-0.2, 0.0],   [0.4, 6.0],   [-4.0, -3.0],  # NOE (-3.5 ppm)
-        [-0.2, 0.0],   [0.4, 6.0],   [3.2, 3.8],    # amide (3.5 ppm)
-        [-0.1, 0.0],   [0.4, 6.0],   [2.5, 3.0]     # amine (2.75 ppm)
-    ]
     
-    BOUNDS_7L = [
-        [0.5, 1.0],                                 # vertical offset
-        [-1.00, -0.02], [0.30, 10.0], [-1.0, 1.0],  # water
-        [-0.25, -0.02], [7.00, 25.0], [-3.0, 0.0],  # MT
-        [-0.15, -0.02], [2.00, 15.0], [-3.2, -2.8], # NOE    (-3.0 ppm)
-        [-0.15, -0.02], [1.00, 15.0], [-4.2, -3.8], # NOE2   (-4.0 ppm)
-        [-0.20, 0.00],  [0.40, 6.00], [3.4, 3.6],   # amide  (3.5 ppm)
-        [-0.20, 0.00],  [0.40, 6.00], [2.5, 2.8],   # amine  (2.75 ppm)
-        [-0.20, 0.00],  [0.40, 6.00], [1.9, 2.1]    # amine2 (2.0 ppm)
-    ]
-
-    if n_peaks == 5:
-        params.add('offset', value=p0[0], min=BOUNDS_5L[0][0], max=BOUNDS_5L[0][1])
-        for i in range(n_peaks):
-            params.add(f'amp_{i}',   value=p0[i*3 + 1], min=BOUNDS_5L[i*3 + 1][0], max=BOUNDS_5L[i*3 + 1][1])
-            params.add(f'width_{i}', value=p0[i*3 + 2], min=BOUNDS_5L[i*3 + 2][0], max=BOUNDS_5L[i*3 + 2][1])
-            params.add(f'shift_{i}', value=p0[i*3 + 3], min=BOUNDS_5L[i*3 + 3][0], max=BOUNDS_5L[i*3 + 3][1])
-    elif n_peaks == 7:
-        params.add('offset', value=p0[0], min=BOUNDS_7L[0][0], max=BOUNDS_7L[0][1])
-        for i in range(n_peaks):
-            params.add(f'amp_{i}',   value=p0[i*3 + 1], min=BOUNDS_7L[i*3 + 1][0], max=BOUNDS_7L[i*3 + 1][1])
-            params.add(f'width_{i}', value=p0[i*3 + 2], min=BOUNDS_7L[i*3 + 2][0], max=BOUNDS_7L[i*3 + 2][1])
-            params.add(f'shift_{i}', value=p0[i*3 + 3], min=BOUNDS_7L[i*3 + 3][0], max=BOUNDS_7L[i*3 + 3][1])
+    params.add('offset', value=p0[0], min=bounds[0][0], max=bounds[0][1])
+    for i in range(n_peaks):
+        params.add(f'amp_{i}',   value=p0[i*3 + 1], min=bounds[i*3 + 1][0], max=bounds[i*3 + 1][1])
+        params.add(f'width_{i}', value=p0[i*3 + 2], min=bounds[i*3 + 2][0], max=bounds[i*3 + 2][1])
+        params.add(f'shift_{i}', value=p0[i*3 + 3], min=bounds[i*3 + 3][0], max=bounds[i*3 + 3][1])
 
     return params
 
-def fit_voxel_lorentzian(z_spectrum, fdata, p0, n_peaks=7):
+def fit_voxel_lorentzian(z_spectrum, fdata, p0, bounds):
+    n_peaks = int((len(p0)-1)/3)
+
     # Fit
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
-        params = create_params_lorentzian(n_peaks, p0)
+        params = create_params_lorentzian(p0, bounds)
         result = minimize(
             _residual_lorentzian,
             params,
@@ -203,7 +180,7 @@ def fit_voxel_lorentzian(z_spectrum, fdata, p0, n_peaks=7):
         ])
     return np.array(fitted)
 
-def fit_volume_parallel_lorentzian(z_data, f_data, p0, mask=None, n_jobs=-1, model='5L'):
+def fit_volume_parallel_lorentzian(z_data, f_data, p0, bounds, mask=None, n_jobs=-1):
     
     nx, ny, nz, n_offsets = z_data.shape
 
@@ -218,17 +195,12 @@ def fit_volume_parallel_lorentzian(z_data, f_data, p0, mask=None, n_jobs=-1, mod
         indices = np.arange(z_flat.shape[0])
 
     # Parallel execution
-    if model == '5L':
-        n_peaks = 5
-    elif model == '7L':
-        n_peaks = 7
-    
     results = Parallel(n_jobs=n_jobs, backend="loky")(
         delayed(fit_voxel_lorentzian)(
             z_flat[i],
             f_flat[i],
             p0,
-            n_peaks       
+            bounds      
         )
         for i in indices
     )

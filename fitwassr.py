@@ -73,7 +73,7 @@ class FitWASSRApp(QMainWindow):
             self.f_wassr_file = file
             self.f_wassr_img = nib.load(self.f_wassr_file)
             self.f_wassr_data = self.f_wassr_img.get_fdata()
-            self.ui.ConsoleTextBrowser.append("The following mask file was loaded.")
+            self.ui.ConsoleTextBrowser.append("The following WASSR file was loaded.")
             self._display_file_tree([file])
             self.ui.ConsoleTextBrowser.append("\n")
     

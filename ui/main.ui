@@ -136,6 +136,9 @@
     </item>
     <item>
      <widget class="QPushButton" name="InspectButton">
+      <property name="enabled">
+       <bool>false</bool>
+      </property>
       <property name="sizePolicy">
        <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
         <horstretch>0</horstretch>
@@ -143,7 +146,7 @@
        </sizepolicy>
       </property>
       <property name="text">
-       <string>Inspect CEST Data</string>
+       <string>Inspect CEST and AACID Data</string>
       </property>
      </widget>
     </item>
