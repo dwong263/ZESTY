@@ -7,12 +7,13 @@ import pyqtgraph as pg
 class TriPlanarViewer(QWidget):
     voxelSelected = Signal(int, int, int)
 
-    def __init__(self, cbar=False, parent=None):
+    def __init__(self, spacing=(1.0, 1.0, 1.0), cbar=False, parent=None):
         super().__init__(parent)
 
         self.volume = None
         self.x = self.y = self.z = 0
         self.cbar = cbar
+        self.spacing = spacing
 
         layout = QVBoxLayout()
         self.setLayout(layout)
@@ -27,10 +28,8 @@ class TriPlanarViewer(QWidget):
         self._simplify_imageview(self.sagittal_view)
         self._simplify_imageview(self.coronal_view)
 
-        # Set lower left origin for proper radiographic view.
-        self._set_origin_lower_left(self.axial_view)
-        self._set_origin_lower_left(self.sagittal_view)
-        self._set_origin_lower_left(self.coronal_view)
+        # Set radiological orientation for each view
+        self._set_radiological_orientation()
 
         layout.addWidget(self.axial_view)
         layout.addWidget(self.sagittal_view)
@@ -57,6 +56,31 @@ class TriPlanarViewer(QWidget):
         self.coronal_view.getImageItem().mouseClickEvent = self._coronal_click
 
     # -------------------------
+    # Orientation & aspect ratio
+    # -------------------------
+    def _set_radiological_orientation(self):
+        # Axial and coronal: flip X so patient-right appears on viewer-left
+        # (standard radiological convention)
+        self.axial_view.getView().invertX(True)
+        self.coronal_view.getView().invertX(True)
+ 
+        # All views: origin at bottom-left so S (superior) is at the top
+        self.axial_view.getView().invertY(False)
+        self.sagittal_view.getView().invertY(False)
+        self.coronal_view.getView().invertY(False)
+ 
+    def _apply_spacing_transforms(self):
+        sx, sy, sz = self.spacing
+        # Set aspect ratio from voxel spacing ratios so each view displays
+        # pixels at their correct proportions without scaling to mm units.
+        # Axial:    horizontal=X, vertical=Y
+        # Sagittal: horizontal=Y, vertical=Z
+        # Coronal:  horizontal=X, vertical=Z
+        self.axial_view.getView().setAspectLocked(True, ratio=sx / sy)
+        self.sagittal_view.getView().setAspectLocked(True, ratio=sy / sz)
+        self.coronal_view.getView().setAspectLocked(True, ratio=sx / sz)
+
+    # -------------------------
     # Crosshairs
     # -------------------------
     def _init_crosshairs(self):
@@ -72,6 +96,8 @@ class TriPlanarViewer(QWidget):
         self.cr_v, self.cr_h = make_crosshair(self.coronal_view.getView())
 
     def _update_crosshairs(self):
+        # Positions are in voxel indices
+
         # Axial: (x, y)
         self.ax_v.setPos(self.x)
         self.ax_h.setPos(self.y)
@@ -90,8 +116,9 @@ class TriPlanarViewer(QWidget):
     # -------------------------
     # Load data
     # -------------------------
-    def set_volume(self, volume, x = None, y = None, z = None):
+    def set_volume(self, volume, spacing=(1.0, 1.0, 1.0), x=None, y=None, z=None):
         self.volume = volume
+        self.spacing = tuple(float(s) for s in spacing)
 
         if x is None:
             self.x = volume.shape[0] // 2
@@ -108,6 +135,7 @@ class TriPlanarViewer(QWidget):
         else:
             self.z = z
 
+        self._apply_spacing_transforms()
         self.update_views()
 
     # -------------------------
@@ -117,10 +145,6 @@ class TriPlanarViewer(QWidget):
         view.ui.roiBtn.hide()
         view.ui.menuBtn.hide()
         view.ui.histogram.hide()
-
-    def _set_origin_lower_left(self, view):
-        vb = view.getView()
-        vb.invertY(False)   # ensures (0,0) is bottom-left
 
     def update_views(self, x=None, y=None, z=None):
         if self.volume is None:

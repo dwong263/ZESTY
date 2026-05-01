@@ -407,7 +407,10 @@ class FitCESTApp(QMainWindow):
             self.v_cest_file = file
             self.v_cest_img = nib.load(file)
             self.v_cest_data = self.v_cest_img.get_fdata()
-            self.cest_viewer.set_volume(self.v_cest_data[:,:,:,self.f_index])
+            self.cest_viewer.set_volume(
+                self.v_cest_data[:,:,:,self.f_index],
+                spacing=self.v_cest_img.header.get_zooms()[:3]
+            )
             
             self.ui.frequencySlider.setMaximum(self.v_cest_data.shape[3]-1)
 
@@ -472,7 +475,10 @@ class FitCESTApp(QMainWindow):
             )
 
             # Viewer settings
-            self.AACID_viewer.set_volume(self.v_aacid_data_smoothed)
+            self.AACID_viewer.set_volume(
+                self.v_aacid_data_smoothed,
+                spacing=self.v_aacid_img.header.get_zooms()[:3]
+            )
 
             cmap = pg.colormap.get('viridis')
             self.AACID_viewer.axial_view.setColorMap(cmap)
@@ -575,7 +581,13 @@ class FitCESTApp(QMainWindow):
         z = int(self.ui.lineEdit_z.text())
         
         self.ui.frequencyIndex.setText(f"f_index = {self.f_index}")
-        self.cest_viewer.set_volume(self.v_cest_data[:,:,:,self.f_index], x, y, z)
+        self.cest_viewer.set_volume(
+            self.v_cest_data[:,:,:,self.f_index],
+            spacing=self.v_cest_img.header.get_zooms()[:3],
+            x=x, 
+            y=y, 
+            z=z
+        )
         self.cest_viewer.update_views(x, y, z)
 
     def _on_fwhm_slider_change(self, fwhm):
@@ -584,7 +596,10 @@ class FitCESTApp(QMainWindow):
             self.v_aacid_data,
             fwhm/np.sqrt(8*np.log(2))
         )
-        self.AACID_viewer.set_volume(self.v_aacid_data_smoothed)
+        self.AACID_viewer.set_volume(
+            self.v_aacid_data_smoothed,
+            spacing=self.v_aacid_img.header.get_zooms()[:3]
+        )
 
     def _calculate_fit(self, f, popt):
         bounds  = np.array([[None, None]] * len(popt))

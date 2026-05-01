@@ -232,7 +232,10 @@ class FitWASSRApp(QMainWindow):
             self.v_wassr_file = file
             self.v_wassr_img = nib.load(file)
             self.v_wassr_data = self.v_wassr_img.get_fdata()
-            self.wassr_viewer.set_volume(self.v_wassr_data[:,:,:,self.f_index])
+            self.wassr_viewer.set_volume(
+                self.v_wassr_data[:,:,:,self.f_index],
+                spacing=self.v_wassr_img.header.get_zooms()[:3]
+            )
             
             self.ui.frequencySlider.setMaximum(self.v_wassr_data.shape[3]-1)
 
@@ -277,7 +280,10 @@ class FitWASSRApp(QMainWindow):
             self.v_dB0_data = self.v_dB0_img.get_fdata()
 
             # Viewer settings
-            self.b0_viewer.set_volume(self.v_dB0_data)
+            self.b0_viewer.set_volume(
+                self.v_dB0_data,
+                spacing=self.v_dB0_img.header.get_zooms()[:3]
+            )
 
             cmap = pg.colormap.get('viridis')
             self.b0_viewer.axial_view.setColorMap(cmap)
@@ -338,7 +344,13 @@ class FitWASSRApp(QMainWindow):
         z = int(self.ui.lineEdit_z.text())
         
         self.ui.frequencyIndex.setText(f"f_index = {self.f_index}")
-        self.wassr_viewer.set_volume(self.v_wassr_data[:,:,:,self.f_index], x, y, z)
+        self.wassr_viewer.set_volume(
+            self.v_wassr_data[:,:,:,self.f_index],
+            spacing=self.v_wassr_img.header.get_zooms()[:3],
+            x=x,
+            y=y,
+            z=z
+        )
         self.wassr_viewer.update_views(x, y, z)
 
     def _calculate_fit(self, f, popt):
