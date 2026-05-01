@@ -24,34 +24,34 @@ def _multi_gaussian(params, f):
 def _residual_gaussian(params, f, z_spectrum):
     return _multi_gaussian(params, f) - z_spectrum
 
-def create_params_gaussian(n_peaks=1, p0=None):
+def create_params_gaussian(p0, bounds=[[0.5, 1.0], [-1.0,-0.02], [-2.0, 2.0], [0.3, 10.0]], n_peaks=1):
     params = Parameters()
     params.add('n_peaks', value = n_peaks, vary=False)
-    params.add('offset', value=p0[0])
+    params.add('offset', value=p0[0], min=bounds[0][0], max=bounds[0][1])
     for i in range(n_peaks):
-        params.add(f'amp_{i}', value=p0[i*3 + 1])
-        params.add(f'cen_{i}', value=p0[i*3 + 2])
-        params.add(f'wid_{i}', value=p0[i*3 + 3])
+        params.add(f'amp_{i}', value=p0[i*3 + 1], min=bounds[i*3 + 1][0], max=bounds[i*3 + 1][1])
+        params.add(f'cen_{i}', value=p0[i*3 + 2], min=bounds[i*3 + 2][0], max=bounds[i*3 + 2][1])
+        params.add(f'wid_{i}', value=p0[i*3 + 3], min=bounds[i*3 + 3][0], max=bounds[i*3 + 3][1])
     
     return params
 
-def fit_voxel_gaussian(z_spectrum, fdata, p0, 
-                       redchi_threshold=0.01,
+def fit_voxel_gaussian(z_spectrum, fdata, p0,
+                       bounds=[[0.5, 1.0], [-1.0,-0.02], [-2.0, 2.0], [0.3, 10.0]],
+                       n_retries=10, perturb_scale=0.1,
+                       seed=None, redchi_threshold=0.01,
                        rel_residual_threshold=0.05,
-                       n_peaks = 1):
+                       n_peaks=1):
     # Check if there is anything to fit in the first place
     if np.sum(z_spectrum) == 0:
         return np.full(len(p0), np.nan)
 
-    with warnings.catch_warnings():
-        params = create_params_gaussian(n_peaks, p0)
-        result = minimize(
-            _residual_gaussian,
-            params,
-            args=(fdata, z_spectrum),
-            method='least_squares' # Trust Region Reflective Method (faster)
-        )
+    # Setup Fit
+    p0_arr = np.array(p0)   # initial guess
+    rng = np.random.default_rng(seed)   # random range for perturbation of initial guess
+    lo = np.array([b[0] for b in bounds])   # lo limit for perturbation of initial guess
+    hi = np.array([b[1] for b in bounds])   # hi limit for perturbation of initial guess
 
+    # Method to Check Fit Success
     def _is_acceptable(result):
         # Primary: optimizer converged
         if result.success:
@@ -63,21 +63,51 @@ def fit_voxel_gaussian(z_spectrum, fdata, p0,
         rel_residual_ok = rel_residual < rel_residual_threshold
         return redchi_ok and rel_residual_ok
 
-    # Check fit success explicitly
-    if _is_acceptable(result):
-        return np.full(len(p0), np.nan)
-    
-    # Extract fitted parameters
-    fitted = [result.params['offset']]
-    for i in range(n_peaks):
-        fitted.extend([
-            result.params[f'amp_{i}'].value,
-            result.params[f'cen_{i}'].value,
-            result.params[f'wid_{i}'].value,
-        ])
-    return np.array(fitted)
+    # Method to Extract Result
+    def _extract(result):
+        fitted = [result.params['offset']]
+        for i in range(n_peaks):
+            fitted.extend([
+                result.params[f'amp_{i}'].value,
+                result.params[f'cen_{i}'].value,
+                result.params[f'wid_{i}'].value,
+            ])
+        return np.array(fitted)
 
-def fit_volume_parallel_gaussian(z_data, f_data, p0, mask=None, n_jobs=-1, n_peaks=1):
+    # Method to Fit
+    def _try_fit(p0_attempt):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            params = create_params_gaussian(p0_attempt.tolist())
+            result = minimize(
+                _residual_gaussian,
+                params,
+                args=(fdata, z_spectrum),
+                method='least_squares' # Trust Region Reflective Method (faster)
+            )
+            return result
+
+    # Try Fits Until Convergence
+    for attempt in range(n_retries+1):
+        if attempt == 0:
+            p0_attempt = p0_arr.copy()
+        else:
+            noise = rng.normal(0, perturb_scale * (hi - lo), size=len(p0_arr))
+            p0_attempt = np.clip(p0_arr + noise, lo, hi)
+
+        result = _try_fit(p0_attempt)
+
+        if _is_acceptable(result):
+            return _extract(result)
+
+    # Return NaN If No Convergence Within n_retries     
+    return np.full(len(p0), np.nan)
+
+def fit_volume_parallel_gaussian(z_data, f_data, p0, 
+                                 mask=None, n_jobs=-1,
+                                 n_retries=5, perturb_scale=0.1,
+                                 n_peaks=1):
+    
     nx, ny, nz, n_offsets = z_data.shape
 
     # Flatten spatial dimensions
@@ -94,7 +124,10 @@ def fit_volume_parallel_gaussian(z_data, f_data, p0, mask=None, n_jobs=-1, n_pea
             z_flat[i],
             f_data,
             p0,
-            n_peaks
+            n_peaks=n_peaks,
+            n_retries=n_retries,
+            perturb_scale=perturb_scale,
+            seed=i  # unique but reproducible seed per voxel
         )
         for i in indices
     )
