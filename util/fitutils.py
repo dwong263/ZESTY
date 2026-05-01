@@ -153,39 +153,79 @@ def create_params_lorentzian(p0, bounds):
 
     return params
 
-def fit_voxel_lorentzian(z_spectrum, fdata, p0, bounds):
+def fit_voxel_lorentzian(z_spectrum, fdata, p0, bounds,
+                         n_retries=5, perturb_scale=0.1,
+                         seed=None, redchi_threshold=0.01, 
+                         rel_residual_threshold=0.05):
+    
     # Check if there is anything to fit in the first place
     if np.sum(z_spectrum) == 0:
         return np.full(len(p0), np.nan)
 
+    # Detect the number of peaks
     n_peaks = int((len(p0)-1)/3)
 
-    # Fit
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)
-        params = create_params_lorentzian(p0, bounds)
-        result = minimize(
-            _residual_lorentzian,
-            params,
-            args=(fdata, z_spectrum),
-            method='least_squares' # Trust Region Reflective Method (faster)
-        )
-    
-    # Check fit success explicitly
-    if not result.success:
-        return np.full(len(p0), np.nan)
-    
-    # Extract fitted parameters
-    fitted = [result.params['offset']]
-    for i in range(n_peaks):
-        fitted.extend([
-            result.params[f'amp_{i}'].value,
-            result.params[f'width_{i}'].value,
-            result.params[f'shift_{i}'].value,
-        ])
-    return np.array(fitted)
+    # Setup Fit
+    p0_arr = np.array(p0)   # initial guess
+    rng = np.random.default_rng(seed)   # random range for perturbation of initial guess
+    lo = np.array([b[0] for b in bounds])   # lo limit for perturbation of initial guess
+    hi = np.array([b[1] for b in bounds])   # hi limit for perturbation of initial guess
 
-def fit_volume_parallel_lorentzian(z_data, f_data, p0, bounds, mask=None, n_jobs=-1):
+    # Method to Check Fit Success
+    def _is_acceptable(result):
+        # Primary: optimizer converged
+        if result.success:
+            return True
+        # Secondary: fit is good even if optimizer flagged non-convergence
+        redchi_ok = (result.redchi is not None) and (result.redchi < redchi_threshold)
+        residuals = result.residual
+        rel_residual = np.sqrt(np.mean(residuals**2)) / (np.ptp(z_spectrum) + 1e-12)
+        rel_residual_ok = rel_residual < rel_residual_threshold
+        return redchi_ok and rel_residual_ok
+
+    # Method to Extract Result
+    def _extract(result):
+        fitted = [result.params['offset'].value]
+        for i in range(n_peaks):
+            fitted.extend([
+                result.params[f'amp_{i}'].value,
+                result.params[f'width_{i}'].value,
+                result.params[f'shift_{i}'].value,
+            ])
+        return np.array(fitted)
+
+    # Method to Fit
+    def _try_fit(p0_attempt):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            params = create_params_lorentzian(p0_attempt.tolist(), bounds)
+            result = minimize(
+                _residual_lorentzian,
+                params,
+                args=(fdata, z_spectrum),
+                method='least_squares' # Trust Region Reflective Method (faster)
+            )
+            return result
+    
+    # Try Fits Until Convergence
+    for attempt in range(n_retries+1):
+        if attempt == 0:
+            p0_attempt = p0_arr.copy()
+        else:
+            noise = rng.normal(0, perturb_scale * (hi - lo), size=len(p0_arr))
+            p0_attempt = np.clip(p0_arr + noise, lo, hi)
+
+        result = _try_fit(p0_attempt)
+
+        if _is_acceptable(result):
+            return _extract(result)
+
+    # Return NaN If No Convergence Within n_retries     
+    return np.full(len(p0), np.nan)
+
+def fit_volume_parallel_lorentzian(z_data, f_data, p0, bounds, 
+                                   mask=None, n_jobs=-1,
+                                   n_retries=5, perturb_scale=0.1):
     
     nx, ny, nz, n_offsets = z_data.shape
 
@@ -205,7 +245,10 @@ def fit_volume_parallel_lorentzian(z_data, f_data, p0, bounds, mask=None, n_jobs
             z_flat[i],
             f_flat[i],
             p0,
-            bounds      
+            bounds,
+            n_retries=n_retries,
+            perturb_scale=perturb_scale,
+            seed=i  # unique but reproducible seed per voxel      
         )
         for i in indices
     )
@@ -225,3 +268,26 @@ def gaussian_smooth(img, sigma):
         return img
     else:
         return gaussian_filter(img, sigma=sigma)
+
+def gaussian_smooth_ignore_nan(img, sigma):
+    if sigma == 0:
+        return img
+
+    # Step 1: define mask (valid = 1, missing = 0)
+    mask = (img != 0).astype(float)
+
+    # Step 2: replace missing values with 0 (so they don't contribute)
+    img_filled = np.where(mask, img, 0)
+
+    # Step 3: smooth both image and mask
+    smoothed_img = gaussian_filter(img_filled, sigma=sigma)
+    smoothed_mask = gaussian_filter(mask, sigma=sigma)
+
+    # Step 4: normalize
+    with np.errstate(invalid='ignore', divide='ignore'):
+        result = smoothed_img / smoothed_mask
+
+    # Optional: reassign missing voxels
+    result[smoothed_mask == 0] = 0
+
+    return result
