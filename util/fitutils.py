@@ -1,11 +1,12 @@
 import numpy as np
+from scipy.ndimage import gaussian_filter
 from lmfit import Parameters, minimize
 from joblib import Parallel, delayed
 import warnings
 
-# -------------------------
+# ----------------------------
 # Methods for Gaussian Fitting
-# -------------------------
+# ----------------------------
 def _1Gaussian(x, off, amp, cen, wid):
     return off+amp*np.exp(-0.5*(x-cen)**2/wid**2)
 
@@ -91,9 +92,9 @@ def fit_volume_parallel_gaussian(z_data, f_data, p0, mask=None, n_jobs=-1, n_pea
 
     return param_map.reshape(nx, ny, nz, n_params)
     
-# -------------------------
+# -------------------------------
 # Methods for Lorentzian Fitting
-# -------------------------
+# -------------------------------
 def _1Lorentzian(f, A, G, d):
     return A * ((G**2/4.0)/((G**2/4.0) + (f - d)**2))
 
@@ -153,6 +154,10 @@ def create_params_lorentzian(p0, bounds):
     return params
 
 def fit_voxel_lorentzian(z_spectrum, fdata, p0, bounds):
+    # Check if there is anything to fit in the first place
+    if np.sum(z_spectrum) == 0:
+        return np.full(len(p0), np.nan)
+
     n_peaks = int((len(p0)-1)/3)
 
     # Fit
@@ -211,3 +216,12 @@ def fit_volume_parallel_lorentzian(z_data, f_data, p0, bounds, mask=None, n_jobs
     param_map[indices] = results
 
     return param_map.reshape(nx, ny, nz, n_params)
+
+# --------------------------------
+# Methods for Smoothing AACID Maps
+# --------------------------------
+def gaussian_smooth(img, sigma):
+    if sigma == 0:
+        return img
+    else:
+        return gaussian_filter(img, sigma=sigma)

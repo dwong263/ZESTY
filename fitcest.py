@@ -12,9 +12,11 @@ import numpy as np
 import pyqtgraph as pg
 import csv
 
+from itertools import batched
+
 from util.viewer import TriPlanarViewer
 from util.plotter import ZSpectrumPlotter
-from util.fitutils import _multi_lorentzian, create_params_lorentzian, fit_volume_parallel_lorentzian
+from util.fitutils import _multi_lorentzian, create_params_lorentzian, fit_volume_parallel_lorentzian, gaussian_smooth
 
 class FitCESTApp(QMainWindow):
     def __init__(self):
@@ -63,14 +65,17 @@ class FitCESTApp(QMainWindow):
 
         # Layout Viewing Tab
         self.ui.LoadCESTButton.clicked.connect(self._load_cest_data)
+        self.ui.LoadB0Button.clicked.connect(self._load_dB0_data)
         self.ui.LoadAACIDButton.clicked.connect(self._load_aacid_data)
         self.ui.LoadFitButton.clicked.connect(self._load_cest_fit)
         self.ui.LoadOffsetsButton.clicked.connect(self._load_cest_offsets)
 
-        self.ui.frequencySlider.valueChanged.connect(self._on_slider_change)
+        self.ui.frequencySlider.valueChanged.connect(self._on_freq_slider_change)
+        self.ui.AACIDFWHMSlider.valueChanged.connect(self._on_fwhm_slider_change)
         self.cest_viewer.voxelSelected.connect(self._on_voxel_select)
         self.AACID_viewer.voxelSelected.connect(self._on_voxel_select)
 
+        self.ui.SaveAACIDImageButton.clicked.connect(self._save_aacid_data)
 
     def _display_file_tree(self, file_paths):
         tree = self._build_tree(file_paths)
@@ -384,7 +389,7 @@ class FitCESTApp(QMainWindow):
                         continue
         AACID_img = nib.Nifti1Image(AACID_data, cest_img.affine, cest_img.header)
         nib.save(AACID_img, f"{self.ui.FilenameLineEdit_fit.text().strip()}_AACID_{n_peaks}L.nii.gz")
-        self.ui.FitConsoleTextBrowser.append(f"AACID map saved to: {self.ui.FilenameLineEdit_fit.text().strip()}_AACID_{n_peaks}.nii.gz")
+        self.ui.FitConsoleTextBrowser.append(f"AACID map saved to: {self.ui.FilenameLineEdit_fit.text().strip()}_AACID_{n_peaks}L.nii.gz")
 
     # ---------------
     # Viewer Methods
@@ -405,6 +410,18 @@ class FitCESTApp(QMainWindow):
             self.cest_viewer.set_volume(self.v_cest_data[:,:,:,self.f_index])
             
             self.ui.frequencySlider.setMaximum(self.v_cest_data.shape[3]-1)
+
+    def _load_dB0_data(self):
+        file, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select ∆B0 File",
+            "",
+            "NIfTI Files (*.nii *.nii.gz)"
+        )
+        if file:    # user didn't cancel
+            self.v_dB0_file = file
+            self.v_dB0_img = nib.load(file)
+            self.v_dB0_data = self.v_dB0_img.get_fdata()
 
     def _load_cest_fit(self):
         file, _ = QFileDialog.getOpenFileName(
@@ -436,6 +453,7 @@ class FitCESTApp(QMainWindow):
             self._update_voxel_plot(x, y, z)
 
     def _load_aacid_data(self):
+        self.ui.SaveAACIDImageButton.setEnabled(False)
         file, _ = QFileDialog.getOpenFileName(
             self,
             "Select ∆B0 File",
@@ -447,8 +465,14 @@ class FitCESTApp(QMainWindow):
             self.v_aacid_img = nib.load(file)
             self.v_aacid_data = self.v_aacid_img.get_fdata()
 
+            fwhm = self.ui.AACIDFWHMSlider.value()
+            self.v_aacid_data_smoothed = gaussian_smooth(
+                self.v_aacid_data,
+                fwhm/np.sqrt(8*np.log(2))
+            )
+
             # Viewer settings
-            self.AACID_viewer.set_volume(self.v_aacid_data)
+            self.AACID_viewer.set_volume(self.v_aacid_data_smoothed)
 
             cmap = pg.colormap.get('viridis')
             self.AACID_viewer.axial_view.setColorMap(cmap)
@@ -469,6 +493,16 @@ class FitCESTApp(QMainWindow):
             self.AACID_viewer.coronal_view.setLevels(vmin, vmax)
 
             self.ui.LoadFitButton.setEnabled(True)
+            self.ui.SaveAACIDImageButton.setEnabled(True)
+
+    def _save_aacid_data(self):
+        fwhm = self.ui.AACIDFWHMSlider.value()
+        aacid_data_smoothed = gaussian_smooth(
+            self.v_aacid_data,
+            fwhm/np.sqrt(8*np.log(2))
+        )
+        aacid_img_smoothed = nib.Nifti1Image(aacid_data_smoothed, self.v_aacid_img.affine, self.v_aacid_img.header)
+        nib.save(aacid_img_smoothed, f"{self.v_aacid_file.replace('.nii.gz', '')}_{fwhm}mm.nii.gz")
 
     def _on_voxel_select(self, x, y, z):
         sending_widget = self.sender()
@@ -484,24 +518,56 @@ class FitCESTApp(QMainWindow):
         self._update_voxel_plot(x, y, z)
 
     def _update_voxel_plot(self, x, y, z):
-        fit     = self._calculate_fit(
+        fit = self._calculate_fit(
             self.v_cest_offsets_interp,
             self.v_cest_params_data[x, y, z]
         )
 
+        offset = self.v_cest_params_data[x, y, z][0]
+        lorentzian_params = batched(self.v_cest_params_data[x, y, z][1:], 3)
+        
+        # Temporary Naming Fix
+        if len(self.v_cest_params_data[x, y, z][1:])/3 == 5:
+            component_names = [
+                'water',
+                'MT',
+                'NOE',
+                'amide',
+                'amine'
+            ]
+        elif len(self.v_cest_params_data[x, y, z][1:])/3 == 7:
+            component_names = [
+                'water',
+                'MT',
+                'NOE',
+                'NOE2',
+                'amide',
+                'amine',
+                'amine2'
+            ]
+        
+        components = []
+        for i, params in enumerate(lorentzian_params):
+            components.append((
+                self._calculate_fit(
+                    self.v_cest_offsets_interp,
+                    np.insert(np.asarray(params), 0, offset)),
+                component_names[i]
+            ))
+
         self.plotter.update_plot(
-            x_raw = self.v_cest_offsets,
+            x_raw = self.v_cest_offsets - self.v_dB0_data[x, y, z],
             z_data= self.v_cest_data[x, y, z, :],
             x_fit = self.v_cest_offsets_interp,
             fit   = fit,
-            components = None,
+            components = components,
             residual   = self._calculate_fit(
                 self.v_cest_offsets,
                 self.v_cest_params_data[x, y, z]
             ) - self.v_cest_data[x, y, z, :]
         )
     
-    def _on_slider_change(self, f_index):
+    def _on_freq_slider_change(self, f_index):
         self.f_index = f_index
 
         x = int(self.ui.lineEdit_x.text())
@@ -511,6 +577,14 @@ class FitCESTApp(QMainWindow):
         self.ui.frequencyIndex.setText(f"f_index = {self.f_index}")
         self.cest_viewer.set_volume(self.v_cest_data[:,:,:,self.f_index], x, y, z)
         self.cest_viewer.update_views(x, y, z)
+
+    def _on_fwhm_slider_change(self, fwhm):
+        self.ui.AACIDFWHMLabel.setText(f"AACID Smoothing FWHM = {fwhm}")
+        self.v_aacid_data_smoothed = gaussian_smooth(
+            self.v_aacid_data,
+            fwhm/np.sqrt(8*np.log(2))
+        )
+        self.AACID_viewer.set_volume(self.v_aacid_data_smoothed)
 
     def _calculate_fit(self, f, popt):
         bounds  = np.array([[None, None]] * len(popt))

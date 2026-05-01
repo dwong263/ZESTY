@@ -518,9 +518,45 @@
             </widget>
            </item>
            <item>
+            <widget class="QPushButton" name="LoadB0Button">
+             <property name="text">
+              <string>Load ∆B0 Image</string>
+             </property>
+            </widget>
+           </item>
+           <item>
             <widget class="QPushButton" name="LoadAACIDButton">
              <property name="text">
               <string>Load AACID Image</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="AACIDFWHMLabel">
+             <property name="text">
+              <string>AACID Smoothing FWHM = 0</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignmentFlag::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QSlider" name="AACIDFWHMSlider">
+             <property name="maximum">
+              <number>5</number>
+             </property>
+             <property name="pageStep">
+              <number>1</number>
+             </property>
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+             <property name="tickPosition">
+              <enum>QSlider::TickPosition::TicksBelow</enum>
+             </property>
+             <property name="tickInterval">
+              <number>1</number>
              </property>
             </widget>
            </item>
@@ -544,10 +580,20 @@
              </property>
             </widget>
            </item>
+           <item>
+            <widget class="QPushButton" name="SaveAACIDImageButton">
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+             <property name="text">
+              <string>Save Current AACID Image</string>
+             </property>
+            </widget>
+           </item>
           </layout>
          </widget>
         </item>
-        <item row="0" column="1" rowspan="2">
+        <item row="0" column="1" rowspan="3">
          <widget class="QGroupBox" name="display_box_CEST">
           <property name="sizePolicy">
            <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
@@ -652,7 +698,27 @@
           </layout>
          </widget>
         </item>
-        <item row="0" column="2" rowspan="2">
+        <item row="1" column="0" rowspan="2">
+         <widget class="QGroupBox" name="display_box_fit">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>300</width>
+            <height>0</height>
+           </size>
+          </property>
+          <property name="title">
+           <string>Data Fit</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_11"/>
+         </widget>
+        </item>
+        <item row="0" column="2" rowspan="3">
          <widget class="QGroupBox" name="display_box_AACID">
           <property name="sizePolicy">
            <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
@@ -675,26 +741,6 @@
            <string>AACID Image</string>
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_12"/>
-         </widget>
-        </item>
-        <item row="1" column="0">
-         <widget class="QGroupBox" name="display_box_fit">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="MinimumExpanding" vsizetype="Preferred">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>300</width>
-            <height>0</height>
-           </size>
-          </property>
-          <property name="title">
-           <string>Data Fit</string>
-          </property>
-          <layout class="QVBoxLayout" name="verticalLayout_11"/>
          </widget>
         </item>
        </layout>

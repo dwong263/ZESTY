@@ -53,7 +53,7 @@ class ZSpectrumPlotter(QWidget):
                 name="Fit"
             )
 
-        # Components (now list of tuples)
+        # Components (list of tuples)
         if x_fit is not None and components is not None:
             for i, (comp, name) in enumerate(components):
                 self.main_plot.plot(
