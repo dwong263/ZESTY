@@ -35,7 +35,10 @@ def create_params_gaussian(n_peaks=1, p0=None):
     
     return params
 
-def fit_voxel_gaussian(z_spectrum, fdata, p0, n_peaks = 1):
+def fit_voxel_gaussian(z_spectrum, fdata, p0, 
+                       redchi_threshold=0.01,
+                       rel_residual_threshold=0.05,
+                       n_peaks = 1):
     # Check if there is anything to fit in the first place
     if np.sum(z_spectrum) == 0:
         return np.full(len(p0), np.nan)
@@ -49,8 +52,19 @@ def fit_voxel_gaussian(z_spectrum, fdata, p0, n_peaks = 1):
             method='least_squares' # Trust Region Reflective Method (faster)
         )
 
+    def _is_acceptable(result):
+        # Primary: optimizer converged
+        if result.success:
+            return True
+        # Secondary: fit is good even if optimizer flagged non-convergence
+        redchi_ok = (result.redchi is not None) and (result.redchi < redchi_threshold)
+        residuals = result.residual
+        rel_residual = np.sqrt(np.mean(residuals**2)) / (np.ptp(z_spectrum) + 1e-12)
+        rel_residual_ok = rel_residual < rel_residual_threshold
+        return redchi_ok and rel_residual_ok
+
     # Check fit success explicitly
-    if not result.success:
+    if _is_acceptable(result):
         return np.full(len(p0), np.nan)
     
     # Extract fitted parameters
