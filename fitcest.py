@@ -485,9 +485,15 @@ class FitCESTApp(QMainWindow):
             self.AACID_viewer.sagittal_view.setColorMap(cmap)
             self.AACID_viewer.coronal_view.setColorMap(cmap)
 
-            vmin = np.min(self.v_aacid_data); vmax = np.max(self.v_aacid_data)
+            # vmin = np.min(self.v_aacid_data); vmax = np.max(self.v_aacid_data)
+            vmin = 1.1; vmax = 1.7
             self.AACID_viewer.colorbar.setColorMap(cmap)
             self.AACID_viewer.colorbar.setLevels(low=vmin, high=vmax)
+            
+            self.AACID_viewer.axial_view.enableAutoLevels(False)
+            self.AACID_viewer.sagittal_view.enableAutoLevels(False)
+            self.AACID_viewer.coronal_view.enableAutoLevels(False)
+
             self.AACID_viewer.colorbar.setImageItem([
                 self.AACID_viewer.axial_view.getImageItem(),
                 self.AACID_viewer.sagittal_view.getImageItem(),

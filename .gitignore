@@ -1,4 +1,7 @@
 .DS_Store
 examples/.DS_Store
 util/__pycache__
+util/__pycache__/croputils.cpython-313.pyc
 util/__pycache__/fitutils.cpython-313.pyc
+util/__pycache__/plotter.cpython-313.pyc
+util/__pycache__/viewer.cpython-313.pyc

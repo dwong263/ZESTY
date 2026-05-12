@@ -126,6 +126,20 @@ class ConcatApp(QMainWindow):
         self.ui.ConsoleTextBrowser.append(f" | File saved to: {filename}.nii.gz")
         self.ui.ConsoleTextBrowser.append("\n")
 
+        if "Yes" in self.ui.MoCoComboBox.currentText():
+            self.ui.ConsoleTextBrowser.append("Motion correction of data (uses FSL mcflirt) ...")
+            cmd = f"mcflirt -in {filename} -out {filename}_mcf -refvol 0 -report"
+            os.system(cmd)
+
+            stacked_cest_img = nib.load(f"{filename}_mcf.nii.gz")
+            stacked_cest_data = stacked_cest_img.get_fdata()
+            unstacked_cest_data = np.unstack(stacked_cest_data, axis=3)
+            unstacked_cest_imgs = [
+                nib.Nifti1Image(data, cest_imgs[0].affine, cest_imgs[0].header) for data in unstacked_cest_data
+            ]
+            cest_imgs = unstacked_cest_imgs
+
+            filename = filename + '_mcf'
 
         self.ui.ConsoleTextBrowser.append("Masking data ...")
         self.ui.ConsoleTextBrowser.append(f" | Mask loaded from: {self.mask_file}")
