@@ -140,8 +140,8 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>448</width>
-            <height>322</height>
+            <width>409</width>
+            <height>314</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="verticalLayout">
@@ -171,6 +171,11 @@
          <item>
           <property name="text">
            <string>Yes (uses mcflirt, requires FSL)</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Yes (uses utils/cest_moco.py)</string>
           </property>
          </item>
          <item>

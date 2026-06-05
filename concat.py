@@ -11,6 +11,7 @@ import numpy as np
 
 from natsort import natsorted
 from util.croputils import crop_to_common_overlap
+from util.cest_moco import run_cest_moco
 
 class ConcatApp(QMainWindow):
     def __init__(self):
@@ -126,9 +127,14 @@ class ConcatApp(QMainWindow):
         self.ui.ConsoleTextBrowser.append(f" | File saved to: {filename}.nii.gz")
         self.ui.ConsoleTextBrowser.append("\n")
 
-        if "Yes" in self.ui.MoCoComboBox.currentText():
+        if "Yes (uses mcflirt, requires FSL)" in self.ui.MoCoComboBox.currentText():
             self.ui.ConsoleTextBrowser.append("Motion correction of data (uses FSL mcflirt) ...")
-            cmd = f"mcflirt -in {filename} -out {filename}_mcf -refvol 0 -report"
+            cmd = f"mcflirt \
+                -in '{filename}' \
+                -out '{filename}_mcf' \
+                -meanvol \
+                -stages 4 \
+                -report"
             os.system(cmd)
 
             stacked_cest_img = nib.load(f"{filename}_mcf.nii.gz")
@@ -140,6 +146,24 @@ class ConcatApp(QMainWindow):
             cest_imgs = unstacked_cest_imgs
 
             filename = filename + '_mcf'
+        elif "Yes (uses utils/cest_moco.py)" in self.ui.MoCoComboBox.currentText():
+            self.ui.ConsoleTextBrowser.append("Motion correction of data (uses cest_moco.py) ...")
+            run_cest_moco(
+                input_nii  = f"{filename}.nii.gz",
+                output_nii = f"{filename}_moco.nii.gz",
+                reference_volume_index=0,
+                offsets_ppm= np.array(self.offsets),
+            )
+
+            stacked_cest_img = nib.load(f"{filename}_moco.nii.gz")
+            stacked_cest_data = stacked_cest_img.get_fdata()
+            unstacked_cest_data = np.unstack(stacked_cest_data, axis=3)
+            unstacked_cest_imgs = [
+                nib.Nifti1Image(data, cest_imgs[0].affine, cest_imgs[0].header) for data in unstacked_cest_data
+            ]
+            cest_imgs = unstacked_cest_imgs
+
+            filename = filename + '_moco'
 
         self.ui.ConsoleTextBrowser.append("Masking data ...")
         self.ui.ConsoleTextBrowser.append(f" | Mask loaded from: {self.mask_file}")
